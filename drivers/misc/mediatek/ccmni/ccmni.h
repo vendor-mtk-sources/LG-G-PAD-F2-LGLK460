@@ -41,7 +41,8 @@
  */
 /* #define ENABLE_NAPI_GRO */
 #ifdef CONFIG_MTK_ECCCI_C2K
-#define ENABLE_WQ_GRO
+//LGP_DATA_ALPS03002265 disable GRO BY MTK
+/* #define ENABLE_WQ_GRO */
 #endif
 
 #define  CCMNI_MTU              1500
