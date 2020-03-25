@@ -1,0 +1,94 @@
+/*
+ * LG Electronics TH8 sensor device tree source
+ *
+ * Copyright (c) 2017 LG Electronics Co., Ltd.
+ *              http://www.lge.com
+ *
+ */
+
+/ {
+/*  start sensor */
+	/delete-node/ als;
+	/delete-node/ gse_1;
+	/delete-node/ gyro;
+	/delete-node/ mse;
+
+	soc {
+		/delete-node/ als_ps@0;
+		/delete-node/ barometer@0;
+		/delete-node/ gsensor@0;
+		/delete-node/ gyroscope@0;
+		/delete-node/ msensor@0;
+	};
+
+	/*sysfs node for unified usercal*/
+	sensors-sysfs {
+		compatible = "lge,sensors-sysfs";
+		sysfs,node =
+			/* group, user_node, kernel node */
+			"accelerometer", "run_calibration",  "/sys/bus/platform/drivers/gsensor/run_fast_calibration",
+			"accelerometer", "selftest",         "/sys/bus/platform/drivers/gsensor/selftest"
+//			"gyroscope",     "run_calibration",  "/sys/bus/platform/drivers/gyroscope/run_fast_calibration",
+//			"gyroscope",     "selftest",         "/sys/bus/platform/drivers/gyroscope/selftest",
+//			"proximity",     "run_calibration",  "/sys/bus/platform/drivers/als_ps/cali",
+//			"proximity",     "calibration_data", "/sys/bus/platform/drivers/als_ps/ps_crosstalk",
+			;
+	};
+/* end sensor */
+};
+
+&i2c0 {
+	sarsensor_2@28 {
+		compatible = "mediatek,sarsensor_2";
+		reg = <0x28>;
+		status = "okay";
+	};
+};
+
+&i2c1 {
+	/delete-node/ gsensor@40;
+	/delete-node/ msensor@0f;
+
+	#include "../bma253.dtsi"
+	#include "../akm09916.dtsi"
+
+	sarsensor_1@28 {
+		compatible = "mediatek,sarsensor_1";
+		reg = <0x28>;
+		status = "okay";
+	};
+};
+
+&pio {
+	sarsensor_intpin_default_a: eint@11 {
+		pins_cmd_dat {
+			pins = <PINMUX_GPIO11__FUNC_GPIO11>;
+			slew-rate = <0>;
+		};
+	};
+
+	sarsensor_intpin_default_b: eint@0 {
+		pins_cmd_dat {
+			pins = <PINMUX_GPIO0__FUNC_GPIO0>;
+			slew-rate = <0>;
+		};
+	};
+};
+
+&sar_1 {
+	pinctrl-names = "pin_default_A";
+	pinctrl-0 = <&sarsensor_intpin_default_a>;
+	interrupt-parent = <&eintc>;
+	interrupts = <11 IRQ_TYPE_EDGE_FALLING>;
+	debounce = <1 0>;
+	status = "okay";
+};
+
+&sar_2 {
+	pinctrl-names = "pin_default_B";
+	pinctrl-0 = <&sarsensor_intpin_default_b>;
+	interrupt-parent = <&eintc>;
+	interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
+	debounce = <1 0>;
+	status = "okay";
+};
