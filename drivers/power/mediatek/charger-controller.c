@@ -125,6 +125,7 @@ enum {
 	CC_VOTER_LLK,		/* store demo mode */
 	CC_VOTER_SAFETY,	/* safety timer */
 	CC_VOTER_CALL,		/* call */
+	CC_VOTER_LCL,		/* limit Charge Level */
 	CC_VOTER_MAX,
 };
 
@@ -196,6 +197,13 @@ struct chgctrl {
 	int llk_soc_min;
 #endif
 
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	int lcl_soc_max;
+	int lcl_soc_min;
+	int lcl_temp_max;
+	int lcl_temp_min;
+#endif
+
 #ifdef CONFIG_LGE_PM_CHARGE_SCENARIO_CALL
 	/* values from device-tree */
 	int call_fcc;
@@ -222,6 +230,12 @@ struct chgctrl {
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	int store_demo_enabled;
 #endif
+
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	int limit_charge_level_enabled;
+	bool lcl_active;
+#endif
+
 #ifdef CONFIG_LGE_PM_USB_CURRENT_MAX
 	unsigned int usb_current_max_enabled;
 	int usb_current_max;
@@ -391,6 +405,7 @@ static char *chgctrl_voter_str[] = {
 	"llk",
 	"safety",
 	"call",
+	"lcl",
 };
 
 static int chgctrl_update_limit(struct chgctrl_limit *limit)
@@ -792,6 +807,12 @@ static void charging_information(struct work_struct *work)
 	if (chgctrl->store_demo_enabled)
 		batt_mode = "Demo";
 #endif
+
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	if (chgctrl->limit_charge_level_enabled)
+		batt_mode = "Limit Charge";
+#endif
+
 #ifdef CONFIG_LGE_PM_PSEUDO_BATTERY
 	if (get_pseudo_batt_info(PSEUDO_BATT_MODE))
 		batt_mode = "Fake";
@@ -1099,6 +1120,90 @@ static void otp_charging_work(struct work_struct *work)
 }
 #endif
 
+/* charger controller : limit charge level */
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+static void chgctrl_lcl_notify(struct chgctrl *chip, bool active)
+{
+	if (chip->lcl_active == active)
+		return;
+
+	chip->lcl_active = active;
+
+	power_supply_changed(&chip->psy);
+}
+
+static void chgctrl_lcl_limit(struct chgctrl *chip)
+{
+	static int enabled = 0;
+	static int capacity = 0;
+	static int temp = 0;
+	bool changed = false;
+	static bool lcl_limited = false;
+	union power_supply_propval val = {0,};
+
+	/* clear limits when disabling store demo mode */
+	if (enabled != chip->limit_charge_level_enabled) {
+		enabled = chip->limit_charge_level_enabled;
+		changed = true;
+	}
+	if (!enabled) {
+		chgctrl_input_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+		chgctrl_battery_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+
+		lcl_limited = false;
+
+		/* notify lcl deactive */
+		chgctrl_lcl_notify(chip, false);
+		return;
+	}
+
+	chgctrl_get_property_from_batt(POWER_SUPPLY_PROP_TEMP, &val);
+	if (temp != val.intval)
+		changed = true;
+	temp = val.intval;
+
+	chgctrl_get_property_from_batt(POWER_SUPPLY_PROP_CAPACITY, &val);
+	if (capacity != val.intval)
+		changed = true;
+	capacity = val.intval;
+
+	if (!changed)
+		return;
+
+	if (temp >= chip->lcl_temp_max)
+		lcl_limited = true;
+	else if (temp < chip->lcl_temp_min)
+		lcl_limited = false;
+
+	if (!lcl_limited) {
+		chgctrl_input_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+		chgctrl_battery_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+
+		/* notify lcl deactive */
+		chgctrl_lcl_notify(chip, false);
+
+		return;
+	}
+
+	/* limit battery charging */
+	if (capacity >= chip->lcl_soc_max) {
+		chgctrl_battery_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 1);
+		/* notify lcl active */
+		chgctrl_lcl_notify(chip, true);
+	}
+	if (capacity <= chip->lcl_soc_min) {
+		chgctrl_battery_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+		/* notify lcl deactive */
+		chgctrl_lcl_notify(chip, false);
+        }
+	/* limit input current */
+	if (capacity > chip->lcl_soc_max)
+		chgctrl_input_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 1);
+	else
+		chgctrl_input_current_limit(chip, CC_CHG_ALL, CC_VOTER_LCL, 0, 0);
+}
+#endif
+
 #ifdef CONFIG_LGE_PM_CHARGE_SAFETY_TIMER
 static void chgctrl_safety_timer_limit(struct chgctrl *chip);
 #endif
@@ -1147,6 +1252,10 @@ static void battery_health_work(struct work_struct *work)
 	if (chgctrl_get_safety_timer_enable() && (chgctrl->safety_time != 0)) {
 		chgctrl_safety_timer_limit(chgctrl);
 	}
+#endif
+
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	chgctrl_lcl_limit(chgctrl);
 #endif
 
 	if (battery_health_polling)
@@ -1744,6 +1853,10 @@ static enum power_supply_property pm_power_props_chgctrl_pros[] = {
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	POWER_SUPPLY_PROP_STORE_DEMO_ENABLED,
 #endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	POWER_SUPPLY_PROP_LIMIT_CHARGE_LEVEL_ENABLED,
+	POWER_SUPPLY_PROP_LCL_ACTIVE,
+#endif
 #ifdef CONFIG_LGE_PM_PSEUDO_BATTERY
 	POWER_SUPPLY_PROP_PSEUDO_BATT,
 #endif
@@ -1780,6 +1893,16 @@ static int chgctrl_set_property(struct power_supply *psy,
 		}
 		break;
 #endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	case POWER_SUPPLY_PROP_LIMIT_CHARGE_LEVEL_ENABLED:
+		pr_cc(PR_INFO, "Set property limit_charge_level_enabled : %d\n", val->intval);
+		if (cc->limit_charge_level_enabled != val->intval) {
+			cc->limit_charge_level_enabled = val->intval;
+			chgctrl_lcl_limit(cc);
+		}
+		break;
+
+#endif
 #ifdef CONFIG_LGE_PM_USB_CURRENT_MAX
 	case POWER_SUPPLY_PROP_USB_CURRENT_MAX:
 		if (val->intval)
@@ -1808,6 +1931,9 @@ static int chgctrl_property_is_writeable(struct power_supply *psy,
 #endif
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	case POWER_SUPPLY_PROP_STORE_DEMO_ENABLED:
+#endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	case POWER_SUPPLY_PROP_LIMIT_CHARGE_LEVEL_ENABLED:
 #endif
 #ifdef CONFIG_LGE_PM_CHARGE_SCENARIO_CALL
 	case POWER_SUPPLY_PROP_CALL_CHG_MODE:
@@ -1882,6 +2008,14 @@ static int chgctrl_get_property(struct power_supply *psy,
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	case POWER_SUPPLY_PROP_STORE_DEMO_ENABLED:
 		val->intval = cc->store_demo_enabled;
+		break;
+#endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	case POWER_SUPPLY_PROP_LIMIT_CHARGE_LEVEL_ENABLED:
+		val->intval = cc->limit_charge_level_enabled;
+		break;
+	case POWER_SUPPLY_PROP_LCL_ACTIVE:
+		val->intval = cc->lcl_active ? 1 : 0;
 		break;
 #endif
 #ifdef CONFIG_LGE_PM_VZW_REQ
@@ -2086,6 +2220,22 @@ static int chgctrl_parse_dt(struct chgctrl *cc)
 	cc->llk_soc_min = 45;
 	rc = of_property_read_u32(node, "lge,llk_soc_min", &cc->llk_soc_min);
 #endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	/* limit charge level */
+	cc->lcl_soc_max = 50;
+	rc = of_property_read_u32(node, "lge,lcl_soc_max", &cc->lcl_soc_max);
+
+	cc->lcl_soc_min = 45;
+	rc = of_property_read_u32(node, "lge,lcl_soc_min", &cc->lcl_soc_min);
+
+	/* limit temperature*/
+	cc->lcl_temp_max = 400;
+	rc = of_property_read_u32(node, "lge,lcl_temp_max", &cc->lcl_temp_max);
+
+	cc->lcl_temp_min = 380;
+	rc = of_property_read_u32(node, "lge,lcl_temp_min", &cc->lcl_temp_min);
+#endif
+
 
 #ifdef CONFIG_LGE_PM_CHARGE_SAFETY_TIMER
 	cc->safety_time = 0;
@@ -2159,6 +2309,10 @@ static int chgctrl_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	chip->store_demo_enabled = 0;
+#endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	chip->limit_charge_level_enabled = 0;
+	chip->lcl_active = false;
 #endif
 #ifdef CONFIG_LGE_PM_USB_CURRENT_MAX
 	chip->usb_current_max_enabled = 0;

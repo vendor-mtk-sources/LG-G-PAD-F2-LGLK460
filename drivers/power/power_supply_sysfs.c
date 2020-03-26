@@ -301,6 +301,10 @@ static struct device_attribute power_supply_attrs[] = {
 #ifdef CONFIG_LGE_PM_LLK_MODE
 	POWER_SUPPLY_ATTR(store_demo_enabled),
 #endif
+#ifdef CONFIG_LGE_PM_LIMIT_CHARGE_LEVEL
+	POWER_SUPPLY_ATTR(limit_charge_level_enabled),
+	POWER_SUPPLY_ATTR(lcl_active),
+#endif
 #ifdef CONFIG_LGE_PM_VZW_REQ
 	POWER_SUPPLY_ATTR(vzw_chg),
 #endif

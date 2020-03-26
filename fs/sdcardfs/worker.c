@@ -184,7 +184,7 @@ out:
 out_unlock:
 	unlock_dir(lower_parent_dentry);
 	sdcardfs_put_lower_path(dentry, &lower_path);
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 out_cred:
 	pw->result = err;
 	pw->operation = SDCARDFS_WQOP_DONE;
@@ -303,7 +303,7 @@ out:
 out_unlock:
 	sdcardfs_put_lower_path(dentry, &lower_path);
 out_revert:
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 out_cred:
 	pw->result = err;
 	pw->operation = SDCARDFS_WQOP_DONE;
@@ -356,7 +356,7 @@ out:
 	unlock_dir(lower_dir_dentry);
 	dput(lower_dentry);
 	sdcardfs_put_lower_path(dentry, &lower_path);
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 out_cred:
 	pw->result = err;
 	pw->operation = SDCARDFS_WQOP_DONE;

@@ -50,6 +50,8 @@
 #include "disp_lowpower.h"
 #include "disp_recorder.h"
 #include "extd_info.h"
+#include "disp_drv_platform.h"
+
 
 int ext_disp_use_cmdq;
 int ext_disp_use_m4u;
@@ -249,6 +251,15 @@ static int _should_config_ovl_input(void)
 	else
 		return 1;
 }
+
+int ext_disp_get_max_layer(void)
+{
+	if (_should_config_ovl_input())
+		return EXTERNAL_SESSION_INPUT_LAYER_COUNT;
+
+	return 1;
+}
+
 
 #define OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
 static long int get_current_time_us(void)

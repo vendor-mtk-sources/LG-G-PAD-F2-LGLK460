@@ -40,7 +40,8 @@ int sdcardfs_init_dentry_cache(void)
 
 void sdcardfs_destroy_dentry_cache(void)
 {
-	kmem_cache_destroy(sdcardfs_dentry_cachep);
+	if (sdcardfs_dentry_cachep)
+		kmem_cache_destroy(sdcardfs_dentry_cachep);
 }
 
 void free_dentry_private_data(struct dentry *dentry)
@@ -433,11 +434,18 @@ struct dentry *sdcardfs_lookup(struct inode *dir, struct dentry *dentry,
 
 	if(!check_caller_access_to_name(parent->d_inode, dentry->d_name.name)) {
 		ret = ERR_PTR(-EACCES);
+		printk(KERN_INFO "%s: need to check the caller's gid in packages.list\n"
+                         "	dentry: %s, task:%s\n",
+						 __func__, dentry->d_name.name, current->comm);
 		goto out_err;
         }
 
 	/* save current_cred and override it */
-	OVERRIDE_CRED_PTR(SDCARDFS_SB(dir->i_sb), saved_cred);
+	saved_cred = override_fsids(SDCARDFS_SB(dir->i_sb));
+	if (!saved_cred) {
+		ret = ERR_PTR(-ENOMEM);
+		goto out_err;
+	}
 
 	sdcardfs_get_lower_path(parent, &lower_parent_path);
 
@@ -472,7 +480,7 @@ struct dentry *sdcardfs_lookup(struct inode *dir, struct dentry *dentry,
 
 out:
 	sdcardfs_put_lower_path(parent, &lower_parent_path);
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 out_err:
 	dput(parent);
 	return ret;

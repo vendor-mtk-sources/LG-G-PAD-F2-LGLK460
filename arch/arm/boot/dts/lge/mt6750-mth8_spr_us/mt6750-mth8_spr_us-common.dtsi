@@ -96,3 +96,11 @@
 &irtx_pwm {
 	status = "disabled";
 };
+
+&pio {
+    mmc1_register_setting_default: mmc1@register_default {
+        cmd_edge = /bits/ 8 <MSDC_SMPL_RISING>;
+        rdata_edge = /bits/ 8 <MSDC_SMPL_RISING>;
+        wdata_edge = /bits/ 8 <MSDC_SMPL_RISING>;
+    };
+};

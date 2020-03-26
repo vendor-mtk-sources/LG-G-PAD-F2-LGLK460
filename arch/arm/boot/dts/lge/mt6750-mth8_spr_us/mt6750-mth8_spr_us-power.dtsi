@@ -101,6 +101,11 @@
 		lge,llk_soc_max = <50>;
 		lge,llk_soc_min = <45>;
 
+		lge,lcl_soc_max = <50>;
+		lge,lcl_soc_min = <45>;
+		lge,lcl_temp_max = <400>;
+		lge,lcl_temp_min = <380>;
+
 		lge,safety_time = <600>; /*min*/
 	};
 };

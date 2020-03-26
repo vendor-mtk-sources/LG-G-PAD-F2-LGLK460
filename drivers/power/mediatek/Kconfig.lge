@@ -105,6 +105,13 @@ config LGE_PM_LLK_MODE
 	help
 	  Restrict charging based on battery level
 
+config LGE_PM_LIMIT_CHARGE_LEVEL
+	bool "restrict charging battery level due to battery swelling"
+	depends on LGE_PM_CHARGER_CONTROLLER
+	default n
+	help
+	  Restrict charging based on battery level
+
 config LGE_PM_MTK_POWERTOP
 	bool "This is applied due to support power-top.lge"
 	default n
